@@ -1,0 +1,2 @@
+pipeline_name,last_loaded_timestamp,last_batch_id,status,run_timestamp
+olist_incremental_pipeline,2018-09-29 09:13:03,BATCH_2018_09,SUCCESS,2026-05-25 14:46:27.170074
