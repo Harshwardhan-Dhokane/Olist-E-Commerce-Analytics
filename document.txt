@@ -1,0 +1,585 @@
+/* ============================================================
+   OLIST E-COMMERCE ANALYTICS POWER BI PROJECT
+   MASTER DAX MEASURES AND CALCULATED COLUMNS
+   ============================================================ */
+
+
+/* ============================================================
+   1. DATE TABLE
+   Create this as: Modeling → New Table
+   ============================================================ */
+
+Dim_Date_PBI =
+ADDCOLUMNS(
+    CALENDAR(DATE(2016, 1, 1), DATE(2018, 12, 31)),
+    "date_key", VALUE(FORMAT([Date], "YYYYMMDD")),
+    "Year", YEAR([Date]),
+    "Month Number", MONTH([Date]),
+    "Month Name", FORMAT([Date], "MMMM"),
+    "Year Month", FORMAT([Date], "YYYY-MM"),
+    "Quarter", "Q" & FORMAT([Date], "Q"),
+    "Day", DAY([Date]),
+    "Day Name", FORMAT([Date], "dddd"),
+    "Week Number", WEEKNUM([Date]),
+    "Is Weekend", IF(WEEKDAY([Date], 2) > 5, 1, 0)
+)
+
+
+/* ============================================================
+   2. CALCULATED COLUMNS
+   Create these as: Table → New Column
+   ============================================================ */
+
+
+/* Create in fact_order_summary */
+
+Delivery Status =
+IF(
+    fact_order_summary[is_late_delivery] = 1,
+    "Late",
+    "On Time"
+)
+
+
+/* Create in fact_order_summary */
+
+Review Score Rounded =
+ROUND(fact_order_summary[review_score], 0)
+
+
+/* Create in fact_order_summary */
+
+Payment Type Clean =
+SWITCH(
+    fact_order_summary[primary_payment_type],
+    "credit_card", "Credit Card",
+    "boleto", "Boleto",
+    "debit_card", "Debit Card",
+    "voucher", "Voucher",
+    fact_order_summary[primary_payment_type]
+)
+
+
+/* Optional: Create in dim_product if product_id is too long */
+
+Product ID Short =
+LEFT(dim_product[product_id], 8)
+
+
+/* ============================================================
+   3. CORE EXECUTIVE OVERVIEW MEASURES
+   Create these as: Modeling → New Measure
+   ============================================================ */
+
+Total Revenue =
+SUM(fact_order_items[item_total_value])
+
+
+Product Revenue =
+SUM(fact_order_items[price])
+
+
+Freight Revenue =
+SUM(fact_order_items[freight_value])
+
+
+Total Orders =
+DISTINCTCOUNT(fact_order_items[order_id])
+
+
+Items Sold =
+SUM(fact_order_items[item_count])
+
+
+Unique Products Sold =
+DISTINCTCOUNT(fact_order_items[product_key])
+
+
+Average Order Value =
+DIVIDE(
+    [Total Revenue],
+    [Total Orders]
+)
+
+
+Average Item Price =
+DIVIDE(
+    [Product Revenue],
+    [Items Sold]
+)
+
+
+Freight % =
+DIVIDE(
+    [Freight Revenue],
+    [Total Revenue]
+)
+
+
+/* ============================================================
+   4. REVIEW MEASURES
+   Used in Executive Overview and Delivery/Review Dashboard
+   ============================================================ */
+
+Average Review Score =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        AVERAGE(fact_order_summary[review_score]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+Avg Review Score =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        AVERAGE(fact_order_summary[review_score]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+Review Score Order Count =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        DISTINCTCOUNT(fact_order_summary[order_id]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+Review Orders =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        DISTINCTCOUNT(fact_order_summary[order_id]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+Review Score Orders =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        DISTINCTCOUNT(fact_order_summary[order_id]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+/* ============================================================
+   5. DELIVERY PERFORMANCE MEASURES
+   Used in Delivery, Payment & Review Analysis Dashboard
+   ============================================================ */
+
+Delivered Orders =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        SUM(fact_order_summary[is_delivered]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+Late Delivery % =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        DIVIDE(
+            SUM(fact_order_summary[is_late_delivery]),
+            SUM(fact_order_summary[is_delivered])
+        ),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+On Time Delivery % =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+VAR DeliveredOrders =
+    CALCULATE(
+        SUM(fact_order_summary[is_delivered]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+VAR LateOrders =
+    CALCULATE(
+        SUM(fact_order_summary[is_late_delivery]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+VAR OnTimeOrders =
+    DeliveredOrders - LateOrders
+RETURN
+    DIVIDE(OnTimeOrders, DeliveredOrders)
+
+
+Avg Delivery Days =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        AVERAGE(fact_order_summary[delivery_days]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+Delivery Status Orders =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        DISTINCTCOUNT(fact_order_summary[order_id]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+Cancelled Orders =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        SUM(fact_order_summary[is_cancelled]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+/* ============================================================
+   6. PAYMENT MEASURES
+   Used in Delivery, Payment & Review Analysis Dashboard
+   ============================================================ */
+
+Payment Revenue =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        SUM(fact_order_summary[total_payment_value]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+Payment Orders =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        DISTINCTCOUNT(fact_order_summary[order_id]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+/* ============================================================
+   7. CUSTOMER & GEOGRAPHY MEASURES
+   Used in Customer & Geography Analysis Dashboard
+   ============================================================ */
+
+Total Customers =
+VAR CustomersInContext =
+    VALUES(fact_order_items[customer_key])
+RETURN
+    CALCULATE(
+        DISTINCTCOUNT(dim_customer[customer_unique_id]),
+        TREATAS(CustomersInContext, dim_customer[customer_key])
+    )
+
+
+Active States =
+VAR CustomersInContext =
+    VALUES(fact_order_items[customer_key])
+RETURN
+    CALCULATE(
+        DISTINCTCOUNT(dim_customer[customer_state]),
+        TREATAS(CustomersInContext, dim_customer[customer_key])
+    )
+
+
+Active Cities =
+VAR CustomersInContext =
+    VALUES(fact_order_items[customer_key])
+RETURN
+    CALCULATE(
+        DISTINCTCOUNT(dim_customer[customer_city]),
+        TREATAS(CustomersInContext, dim_customer[customer_key])
+    )
+
+
+/* ============================================================
+   8. SIMPLE ALTERNATIVE CUSTOMER MEASURES
+   Use these only if your relationships filter correctly
+   ============================================================ */
+
+Total Customers Simple =
+DISTINCTCOUNT(dim_customer[customer_unique_id])
+
+
+Active States Simple =
+DISTINCTCOUNT(dim_customer[customer_state])
+
+
+Active Cities Simple =
+DISTINCTCOUNT(dim_customer[customer_city])
+
+
+/* ============================================================
+   9. SALES & PRODUCT ANALYSIS MEASURES
+   Used in Sales & Product Analysis Dashboard
+   ============================================================ */
+
+Product Revenue KPI =
+SUM(fact_order_items[price])
+
+
+Total Revenue KPI =
+SUM(fact_order_items[item_total_value])
+
+
+Items Sold KPI =
+SUM(fact_order_items[item_count])
+
+
+Unique Products Sold KPI =
+DISTINCTCOUNT(fact_order_items[product_key])
+
+
+Average Item Price KPI =
+DIVIDE(
+    [Product Revenue],
+    [Items Sold]
+)
+
+
+Freight Revenue KPI =
+SUM(fact_order_items[freight_value])
+
+
+Freight Percentage KPI =
+DIVIDE(
+    [Freight Revenue],
+    [Total Revenue]
+)
+
+
+/* ============================================================
+   10. EXECUTIVE OVERVIEW KPI MEASURES
+   Used in Executive Overview Dashboard
+   ============================================================ */
+
+Executive Total Revenue =
+SUM(fact_order_items[item_total_value])
+
+
+Executive Total Orders =
+DISTINCTCOUNT(fact_order_items[order_id])
+
+
+Executive Items Sold =
+SUM(fact_order_items[item_count])
+
+
+Executive Average Order Value =
+DIVIDE(
+    [Executive Total Revenue],
+    [Executive Total Orders]
+)
+
+
+Executive Average Review Score =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        AVERAGE(fact_order_summary[review_score]),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+Executive Late Delivery % =
+VAR OrdersInContext =
+    VALUES(fact_order_items[order_id])
+RETURN
+    CALCULATE(
+        DIVIDE(
+            SUM(fact_order_summary[is_late_delivery]),
+            SUM(fact_order_summary[is_delivered])
+        ),
+        TREATAS(OrdersInContext, fact_order_summary[order_id])
+    )
+
+
+/* ============================================================
+   11. OPTIONAL DEBUG / TEST MEASURE
+   Used when State or Category slicers do not filter revenue
+   ============================================================ */
+
+Total Revenue Test =
+CALCULATE(
+    SUM(fact_order_items[item_total_value]),
+    TREATAS(
+        VALUES(dim_customer[customer_key]),
+        fact_order_items[customer_key]
+    ),
+    TREATAS(
+        VALUES(dim_product[product_key]),
+        fact_order_items[product_key]
+    )
+)
+
+
+/* ============================================================
+   12. OPTIONAL DISPLAY / TOOLTIP MEASURES
+   Useful for tooltips and matrix visuals
+   ============================================================ */
+
+Total Product Categories =
+DISTINCTCOUNT(dim_product[product_category_name_english])
+
+
+Total Sellers =
+DISTINCTCOUNT(fact_order_items[seller_key])
+
+
+Average Freight per Order =
+DIVIDE(
+    [Freight Revenue],
+    [Total Orders]
+)
+
+
+Average Freight per Item =
+DIVIDE(
+    [Freight Revenue],
+    [Items Sold]
+)
+
+
+Revenue per Customer =
+DIVIDE(
+    [Total Revenue],
+    [Total Customers]
+)
+
+
+Orders per Customer =
+DIVIDE(
+    [Total Orders],
+    [Total Customers]
+)
+
+
+/* ============================================================
+   13. MATRIX / SUMMARY MEASURES
+   Used in Geography and Delivery Summary Tables
+   ============================================================ */
+
+State Total Customers =
+[Total Customers]
+
+
+State Total Orders =
+[Total Orders]
+
+
+State Total Revenue =
+[Total Revenue]
+
+
+State Avg Order Value =
+[Average Order Value]
+
+
+State Active Cities =
+[Active Cities]
+
+
+State Delivered Orders =
+[Delivered Orders]
+
+
+State Late Delivery % =
+[Late Delivery %]
+
+
+State Avg Delivery Days =
+[Avg Delivery Days]
+
+
+State Avg Review Score =
+[Avg Review Score]
+
+
+State Payment Revenue =
+[Payment Revenue]
+
+
+/* ============================================================
+   14. MEASURES FOR CHARTS AND VISUALS
+   These are aliases for visual readability
+   ============================================================ */
+
+Monthly Revenue Trend Value =
+[Total Revenue]
+
+
+Monthly Orders Trend Value =
+[Total Orders]
+
+
+Monthly Product Revenue Trend Value =
+[Product Revenue]
+
+
+Revenue vs Items Sold Revenue =
+[Product Revenue]
+
+
+Revenue vs Items Sold Quantity =
+[Items Sold]
+
+
+Top States Revenue =
+[Total Revenue]
+
+
+Top Cities Revenue =
+[Total Revenue]
+
+
+Top Product Category Revenue =
+[Product Revenue]
+
+
+Top Product ID Revenue =
+[Product Revenue]
+
+
+Category Revenue Contribution =
+[Product Revenue]
+
+
+Monthly Late Delivery Trend =
+[Late Delivery %]
+
+
+Payment Type Distribution Value =
+[Payment Revenue]
+
+
+Monthly Payment Revenue by Type Value =
+[Payment Revenue]
+
+
+Review Score Distribution Value =
+[Review Score Orders]
+
+
+Avg Review Score by Category Value =
+[Avg Review Score]
+
+
+Avg Delivery Days by State Value =
+[Avg Delivery Days]
